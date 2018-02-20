@@ -30,7 +30,7 @@
  * source code with only those rights set forth herein.
  */
 
-/* This file contains the implementation of the BLAS-1 function ddot */
+ /* This file contains the implementation of the BLAS-1 function daxpy */
 
 #include <stdlib.h>
 #include <assert.h>
@@ -44,22 +44,24 @@
 texture<double> texX;
 texture<double> texY;
 
-__global__ void ddot_gld_main (struct cublasDdotParams parms);
-__global__ void ddot_tex_main (struct cublasDdotParams parms);
+__global__ void saxpy_gld_main (struct cublasDaxpyParams parms);
+__global__ void daxpy_tex_main (struct cublasDaxpyParams parms);
 
 /*
- * double 
- * ddot (int n, const double *x, int incx, const double *y, int incy)
+ * void
+ * daxpy (int n, double alpha, const double *x, int incx, double *y, int incy)
  *
- * computes the dot product of two single precision vectors. It returns the 
- * dot product of the single precision vectors x and y if successful, and
- * 0.0f otherwise. It computes the sum for i = 0 to n - 1 of x[lx + i * 
- * incx] * y[ly + i * incy], where lx = 1 if incx >= 0, else lx = 1 + (1 - n)
- * *incx, and ly is defined in a similar way using incy.
+ * multiplies single precision vector x by single precision scalar alpha 
+ * and adds the result to single precision vector y; that is, it overwrites 
+ * single precision y with single precision alpha * x + y. For i = 0 to n - 1, 
+ * it replaces y[ly + i * incy] with alpha * x[lx + i * incx] + y[ly + i *
+ * incy], where lx = 1 if incx >= 0, else lx = 1 +(1 - n) * incx, and ly is 
+ * defined in a similar way using incy.
  *
  * Input
  * -----
  * n      number of elements in input vectors
+ * alpha  single precision scalar multiplier
  * x      single precision vector with n elements
  * incx   storage spacing between elements of x
  * y      single precision vector with n elements
@@ -67,30 +69,26 @@ __global__ void ddot_tex_main (struct cublasDdotParams parms);
  *
  * Output
  * ------
- * returns single precision dot product (zero if n <= 0)
+ * y      single precision result (unchanged if n <= 0)
  *
- * Reference: http://www.netlib.org/blas/ddot.f
+ * Reference: http://www.netlib.org/blas/daxpy.f
  *
  * Error status for this function can be retrieved via cublasGetError().
- *
+ * 
  * Error Status
  * ------------
- * CUBLAS_STATUS_NOT_INITIALIZED  if CUBLAS library has nor been initialized
- * CUBLAS_STATUS_EXECUTION_FAILED if function failed to execute on GPU
+ * CUBLAS_STATUS_NOT_INITIALIZED  if CUBLAS library has not been initialized
+ * CUBLAS_STATUS_EXECUTION_FAILED if function failed to launch on GPU
  */
-__host__ double CUBLASAPI cublasDdot (int n, const double *x, int incx,
-                                     const double *y, int incy)
+__host__ void CUBLASAPI cublasDaxpy (int n, double alpha, const double *x,
+                                     int incx, double *y, int incy)
 {
     struct cublasContext *ctx = CUBLAS_GET_CTX();
-    struct cublasDdotParams params;
+    struct cublasDaxpyParams params;
     cudaError_t cudaStat;
-    cublasStatus status;
-    double *devPtrT;
     int nbrCtas;
+    int elemsPerCta;
     int threadsPerCta;
-    double *tx;
-    double dot = 0.0f;
-    int i;
     int sizeX = n * (imax (1, abs(incx)));
     int sizeY = n * (imax (1, abs(incy)));
     size_t texXOfs = 0;
@@ -99,20 +97,11 @@ __host__ double CUBLASAPI cublasDdot (int n, const double *x, int incx,
 
     if (!cublasInitialized (ctx)) {
         cublasSetError (ctx, CUBLAS_STATUS_NOT_INITIALIZED);
-        return dot;
+        return;
     }
-    
-    if (n < CUBLAS_DDOT_CTAS) {
-         nbrCtas = n;
-         threadsPerCta = CUBLAS_DDOT_THREAD_COUNT;
-    } else {
-         nbrCtas = CUBLAS_DDOT_CTAS;
-         threadsPerCta = CUBLAS_DDOT_THREAD_COUNT;
-    }
-
     /* early out if nothing to do */
-    if (n <= 0) {
-        return dot;
+    if ((alpha == 0.0f) || (n <= 0)) {
+        return;
     }
 
     useTexture = ((sizeX < CUBLAS_MAX_1DBUF_SIZE) &&
@@ -122,7 +111,7 @@ __host__ double CUBLASAPI cublasDdot (int n, const double *x, int incx,
      * for vectors that are short, or those that are aligned and have unit
      * stride and thus have nicely coalescing GLDs.
      */
-    if ((n < 70000) || /* experimental bound */
+    if ((n < 80000) || /* experimental bound */
         ((sizeX == n) && (sizeY == n) && 
          (!(((uintptr_t) x) % CUBLAS_WORD_ALIGN)) && 
          (!(((uintptr_t) y) % CUBLAS_WORD_ALIGN)))) {
@@ -133,76 +122,43 @@ __host__ double CUBLASAPI cublasDdot (int n, const double *x, int incx,
         if ((cudaStat=cudaBindTexture (&texXOfs,texX,x,sizeX*sizeof(x[0]))) !=
             cudaSuccess) {
             cublasSetError (ctx, CUBLAS_STATUS_MAPPING_ERROR);
-            return dot;
+            return;
         }
         if ((cudaStat=cudaBindTexture (&texYOfs,texY,y,sizeY*sizeof(y[0]))) !=
             cudaSuccess) {
             cudaUnbindTexture (texX);
             cublasSetError (ctx, CUBLAS_STATUS_MAPPING_ERROR);
-            return dot;
+            return;
         }
         texXOfs /= sizeof(x[0]);
         texYOfs /= sizeof(y[0]);
     }
 
-    /* allocate memory to collect results, one per CTA */
-    status = cublasAlloc (nbrCtas, sizeof(tx[0]), (void**)&devPtrT);
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        cublasSetError (ctx, status);
-        return dot;
-    }
-
-    /* allocate small buffer to retrieve the per-CTA results */
-    tx = (double *) calloc (nbrCtas, sizeof(tx[0]));
-    if (!tx) {
-        cublasFree (devPtrT);
-        cublasSetError (ctx, CUBLAS_STATUS_ALLOC_FAILED);
-        return dot;
-    }
-
     memset (&params, 0, sizeof(params));
-    params.n = n;
+    params.n  = n;
     params.sx = x;
+    params.sa = alpha;
     params.incx = incx;
     params.sy = y;
     params.incy = incy;
-    params.result = devPtrT;
     params.texXOfs = (int)texXOfs;
     params.texYOfs = (int)texYOfs;
 
+    cublasVectorSplay (n, CUBLAS_DAXPY_THREAD_MIN, CUBLAS_DAXPY_THREAD_MAX,
+                       CUBLAS_DAXPY_CTAS_MAX, &nbrCtas, &elemsPerCta, 
+                       &threadsPerCta);
+
     cudaStat = cudaGetLastError(); /* clear error status */
     if (useTexture) {
-        ddot_tex_main<<<nbrCtas,threadsPerCta>>>(params);
+        daxpy_tex_main<<<nbrCtas,threadsPerCta>>>(params);
     } else {
-        ddot_gld_main<<<nbrCtas,threadsPerCta>>>(params);
+        daxpy_gld_main<<<nbrCtas,threadsPerCta>>>(params);
     }
     cudaStat = cudaGetLastError(); /* check for launch error */
 
     if (cudaStat != cudaSuccess) {
-        cublasFree (devPtrT);
-        free (tx);
         cublasSetError (ctx, CUBLAS_STATUS_EXECUTION_FAILED);
-        return dot;
     }
-
-    /* Sum the results from each CTA */
-    status = cublasGetVector (nbrCtas, sizeof(tx[0]), devPtrT, 1, tx, 1);
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        cublasFree (devPtrT);
-        free (tx);
-        cublasSetError (ctx, CUBLAS_STATUS_INTERNAL_ERROR);
-        return dot;
-    }    
-
-    for (i = 0; i < nbrCtas; i++) {
-        dot += tx[i];
-    }
-
-    status = cublasFree (devPtrT);
-    if (status != CUBLAS_STATUS_SUCCESS) {
-        cublasSetError (ctx, CUBLAS_STATUS_INTERNAL_ERROR); /* corruption ? */
-    }
-    free (tx);
 
     if (useTexture) {
         if ((cudaStat = cudaUnbindTexture (texX)) != cudaSuccess) {
@@ -212,22 +168,18 @@ __host__ double CUBLASAPI cublasDdot (int n, const double *x, int incx,
             cublasSetError (ctx, CUBLAS_STATUS_INTERNAL_ERROR);
         }
     }
-
-    return dot;
 }
 
-__shared__ double partialSum[CUBLAS_DDOT_THREAD_COUNT];        
-
-__global__ void ddot_gld_main (struct cublasDdotParams parms) 
+__global__ void daxpy_gld_main (struct cublasDaxpyParams parms)
 {
 #undef  USE_TEX
 #define USE_TEX 0
-#include "ddot.h"
+#include "daxpy.h"
 }
 
-__global__ void ddot_tex_main (struct cublasDdotParams parms) 
+__global__ void daxpy_tex_main (struct cublasDaxpyParams parms)
 {
 #undef  USE_TEX
 #define USE_TEX 1
-#include "ddot.h"
+#include "daxpy.h"
 }

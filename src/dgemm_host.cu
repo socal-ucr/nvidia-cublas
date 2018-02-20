@@ -51,9 +51,9 @@
 
 /*
  * void 
- * cublasSgemm (char transa, char transb, int m, int n, int k, float alpha, 
- *              const float *A, int lda, const float *B, int ldb, float beta, 
- *              float *C, int ldc)
+ * cublasDgemm (char transa, char transb, int m, int n, int k, double alpha, 
+ *              const double *A, int lda, const double *B, int ldb, double beta, 
+ *              double *C, int ldc)
  *
  * computes the product of matrix A and matrix B, multiplies the result 
  * by a scalar alpha, and adds the sum to the product of matrix C and
@@ -112,10 +112,10 @@
  * CUBLAS_STATUS_INVALID_VALUE    if any of m, n, or k are < 0
  * CUBLAS_STATUS_EXECUTION_FAILED if function failed to launch on GPU
  */
-__host__ void CUBLASAPI cublasSgemm (char transa, char transb, int m, int n,
-                                     int k, float alpha, const float *A,
-                                     int lda, const float *B, int ldb,
-                                     float beta, float *C, int ldc)
+__host__ void CUBLASAPI cublasDgemm (char transa, char transb, int m, int n,
+                                     int k, double alpha, const double *A,
+                                     int lda, const double *B, int ldb,
+                                     double beta, double *C, int ldc)
 {
     struct cublasContext *ctx = CUBLAS_GET_CTX();
     int ta, tb;
@@ -182,7 +182,7 @@ __host__ void CUBLASAPI cublasSgemm (char transa, char transb, int m, int n,
     if (((m * n) <= CUBLAS_SMALL_SGEMM_MAT_MAX_ELEMS) &&
         ((m * k) <= CUBLAS_SMALL_SGEMM_MAT_MAX_ELEMS) &&
         ((n * k) <= CUBLAS_SMALL_SGEMM_MAT_MAX_ELEMS)) {
-        cublasSmallSgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb,
+        cublasSmallDgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb,
                           beta, C, ldc);
         return;
     }
@@ -199,11 +199,11 @@ __host__ void CUBLASAPI cublasSgemm (char transa, char transb, int m, int n,
                   (k   <= CUBLAS_FASTIMUL_F_MAX_DIM));
 
     if (useFastImul) {
-        cublasFastSgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb, 
+        cublasFastDgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb, 
                          beta, C, ldc);
         return;
     }        
 
-    cublasLargeSgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb, 
+    cublasLargeDgemm (ctx, transa, transb, m, n, k, alpha, A, lda, B, ldb, 
                       beta, C, ldc);
 }

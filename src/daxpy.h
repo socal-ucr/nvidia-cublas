@@ -42,33 +42,46 @@
 #define fetchy(i)  sy[i]
 #endif /* USE_TEX */
 
-    unsigned int i, n, tid, totalThreads, ctaStart;
-    double sum = 0.0f;
+    int i, n, tid, totalThreads, ctaStart;
 #if (USE_TEX==0)
     const double *sx;
-    const double *sy;
 #endif
-    /* wrapper must ensure that parms.n > 0 */
+    double *sy;
+    
+    /* NOTE: wrapper must ensure that parms.n > 0  */
     tid = threadIdx.x;
     n = parms.n;
 #if (USE_TEX==0)
     sx = parms.sx;
-    sy = parms.sy;
 #endif
-    totalThreads = gridDim.x * CUBLAS_DDOT_THREAD_COUNT;
-    ctaStart = CUBLAS_DDOT_THREAD_COUNT * blockIdx.x;
+    sy = parms.sy;
 
-    if ((parms.incx == parms.incy) && (parms.incx > 0)) {
+    totalThreads = gridDim.x*blockDim.x;
+    ctaStart = blockDim.x*blockIdx.x;
+   
+    if (parms.incy == 0) {
+        if ((blockIdx.x == 0) && (tid == 0)) {
+            /* FIXME: This code is functionally correct, but inefficient */
+            int ix = (parms.incx < 0) ? ((1 - parms.n) * parms.incx) : 0;
+            double sum = 0.0f;
+            for (i = 0; i < parms.n; i++) {
+                sum += parms.sa * fetchx(ix);
+                ix += parms.incx;
+            }
+            sy[0] += sum;
+        }
+    } else if ((parms.incx == parms.incy) && (parms.incx > 0)) {
         /* equal, positive, increments */
         if (parms.incx == 1) {
             /* both increments equal to 1 */
             for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-                sum += fetchy(i) * fetchx(i);
+                sy[i] = fetchy(i) + parms.sa * fetchx(i);
             }
         } else {
             /* equal, positive, non-unit increments. */
             for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-                sum += fetchy(i*parms.incx) * fetchx(i*parms.incx);
+                sy[i*parms.incx] = (fetchy(i*parms.incx) + 
+                                    parms.sa * fetchx(i*parms.incx));
             }
         }
     } else {
@@ -76,21 +89,8 @@
         int ix = ((parms.incx < 0) ? ((1 - n) * parms.incx) : 0);
         int iy = ((parms.incy < 0) ? ((1 - n) * parms.incy) : 0);
         for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-            sum += fetchy(iy+i*parms.incy) * fetchx(ix+i*parms.incx);
+            sy[iy+i*parms.incy] = (fetchy(iy+i*parms.incy) + 
+                                   parms.sa * fetchx(ix+i*parms.incx));
         }
     }
-    partialSum[tid] = sum;
 
-#if (CUBLAS_DDOT_THREAD_COUNT & (CUBLAS_DDOT_THREAD_COUNT - 1))
-#error code requires CUBLAS_DDOT_THREAD_COUNT to be a power of 2
-#endif
-
-    for (i = CUBLAS_DDOT_THREAD_COUNT >> 1; i > 0; i >>= 1) {
-        __syncthreads(); 
-        if (tid < i) {
-            partialSum[tid] += partialSum[tid + i]; 
-        }
-    }
-    if (tid == 0) {
-        parms.result[blockIdx.x] = partialSum[tid];
-    }

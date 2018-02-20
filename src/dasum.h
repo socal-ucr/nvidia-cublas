@@ -32,60 +32,42 @@
 
 #if (USE_TEX==1)
 #undef fetchx
-#undef fetchy
 #define fetchx(i)  tex1Dfetch(texX,parms.texXOfs+(i))
-#define fetchy(i)  tex1Dfetch(texY,parms.texYOfs+(i))
 #else
 #undef fetchx
-#undef fetchy
 #define fetchx(i)  sx[i]
-#define fetchy(i)  sy[i]
 #endif /* USE_TEX */
 
-    unsigned int i, n, tid, totalThreads, ctaStart;
+    unsigned int i, tid, totalThreads, ctaStart;
     double sum = 0.0f;
 #if (USE_TEX==0)
     const double *sx;
-    const double *sy;
 #endif
-    /* wrapper must ensure that parms.n > 0 */
+    /* NOTE: wrapper must ensure that parms.n > 0 and parms.incx > 0 */
     tid = threadIdx.x;
-    n = parms.n;
 #if (USE_TEX==0)
     sx = parms.sx;
-    sy = parms.sy;
 #endif
-    totalThreads = gridDim.x * CUBLAS_DDOT_THREAD_COUNT;
-    ctaStart = CUBLAS_DDOT_THREAD_COUNT * blockIdx.x;
+    totalThreads = gridDim.x * CUBLAS_DASUM_THREAD_COUNT;
+    ctaStart = CUBLAS_DASUM_THREAD_COUNT * blockIdx.x;
 
-    if ((parms.incx == parms.incy) && (parms.incx > 0)) {
-        /* equal, positive, increments */
-        if (parms.incx == 1) {
-            /* both increments equal to 1 */
-            for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-                sum += fetchy(i) * fetchx(i);
-            }
-        } else {
-            /* equal, positive, non-unit increments. */
-            for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-                sum += fetchy(i*parms.incx) * fetchx(i*parms.incx);
-            }
+    if (parms.incx == 1) {
+        /* increment equal to 1 */
+        for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
+            sum += fabsf(fetchx(i));
         }
     } else {
-        /* unequal or nonpositive increments */
-        int ix = ((parms.incx < 0) ? ((1 - n) * parms.incx) : 0);
-        int iy = ((parms.incy < 0) ? ((1 - n) * parms.incy) : 0);
+        /* increment not equal to 1 */
         for (i = ctaStart + tid; i < parms.n; i += totalThreads) {
-            sum += fetchy(iy+i*parms.incy) * fetchx(ix+i*parms.incx);
+            sum += fabsf(fetchx(i*parms.incx));
         }
     }
     partialSum[tid] = sum;
 
-#if (CUBLAS_DDOT_THREAD_COUNT & (CUBLAS_DDOT_THREAD_COUNT - 1))
-#error code requires CUBLAS_DDOT_THREAD_COUNT to be a power of 2
+#if (CUBLAS_DASUM_THREAD_COUNT & (CUBLAS_DASUM_THREAD_COUNT - 1))
+#error code requires CUBLAS_DASUM_THREAD_COUNT to be a power of 2
 #endif
-
-    for (i = CUBLAS_DDOT_THREAD_COUNT >> 1; i > 0; i >>= 1) {
+    for (i = CUBLAS_DASUM_THREAD_COUNT >> 1; i > 0; i >>= 1) {
         __syncthreads(); 
         if (tid < i) {
             partialSum[tid] += partialSum[tid + i]; 

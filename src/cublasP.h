@@ -80,15 +80,30 @@ __tlsHookInitTlsValueForcublasThreadContext(cublasInitCtx, cublasShutDownCtx)
 #define CUBLAS_SAXPY_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
 #define CUBLAS_SAXPY_THREAD_MAX         (128)
 
+#define CUBLAS_DAXPY_CTAS_MIN           (1)
+#define CUBLAS_DAXPY_CTAS_MAX           (80)
+#define CUBLAS_DAXPY_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
+#define CUBLAS_DAXPY_THREAD_MAX         (128)
+
 #define CUBLAS_SCOPY_CTAS_MIN           (1)
 #define CUBLAS_SCOPY_CTAS_MAX           (80)
 #define CUBLAS_SCOPY_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
 #define CUBLAS_SCOPY_THREAD_MAX         (128)
 
+#define CUBLAS_DCOPY_CTAS_MIN           (1)
+#define CUBLAS_DCOPY_CTAS_MAX           (80)
+#define CUBLAS_DCOPY_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
+#define CUBLAS_DCOPY_THREAD_MAX         (128)
+
 #define CUBLAS_SSCAL_CTAS_MIN           (1)
 #define CUBLAS_SSCAL_CTAS_MAX           (96)
 #define CUBLAS_SSCAL_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
 #define CUBLAS_SSCAL_THREAD_MAX         (128)
+
+#define CUBLAS_DSCAL_CTAS_MIN           (1)
+#define CUBLAS_DSCAL_CTAS_MAX           (96)
+#define CUBLAS_DSCAL_THREAD_MIN         (CUBLAS_THREAD_BUNDLE_SIZE)
+#define CUBLAS_DSCAL_THREAD_MAX         (128)
 
 #define CUBLAS_SSWAP_CTAS_MIN           (1)
 #define CUBLAS_SSWAP_CTAS_MAX           (80)
@@ -201,6 +216,14 @@ __tlsHookInitTlsValueForcublasThreadContext(cublasInitCtx, cublasShutDownCtx)
 #define CUBLAS_SGEMVT_LOG_THREAD_COUNT  (7)
 #define CUBLAS_SGEMVT_THREAD_COUNT      (1 << CUBLAS_SGEMVT_LOG_THREAD_COUNT)
 #define CUBLAS_SGEMVT_CTAS              (64)
+
+#define CUBLAS_DGEMVN_LOG_THREAD_COUNT  (7)
+#define CUBLAS_DGEMVN_THREAD_COUNT      (1 << CUBLAS_DGEMVN_LOG_THREAD_COUNT)
+#define CUBLAS_DGEMVN_CTAS              (64)
+
+#define CUBLAS_DGEMVT_LOG_THREAD_COUNT  (7)
+#define CUBLAS_DGEMVT_THREAD_COUNT      (1 << CUBLAS_DGEMVT_LOG_THREAD_COUNT)
+#define CUBLAS_DGEMVT_CTAS              (64)
 
 #define CUBLAS_STRSM_LOG_THREAD_COUNT   (9)
 #define CUBLAS_STRSM_THREAD_COUNT       (1 << CUBLAS_STRSM_LOG_THREAD_COUNT)
@@ -324,6 +347,17 @@ struct cublasSaxpyParams {
     float *sy;
     int   n;
     float sa;
+    int   incx;
+    int   incy;
+    int   texXOfs;
+    int   texYOfs;
+};
+
+struct cublasDaxpyParams {
+    const double *sx;
+    double *sy;
+    int   n;
+    double sa;
     int   incx;
     int   incy;
     int   texXOfs;
@@ -510,6 +544,24 @@ struct cublasSgemmParams {
     int texBOfs;
 };
 
+struct cublasDgemmParams {
+    const double *A;
+    const double *B;
+    double *C;
+    unsigned int   transa;
+    unsigned int   transb;
+    unsigned int   m;
+    unsigned int   n;
+    unsigned int   k;
+    double alpha;
+    unsigned int   lda;
+    unsigned int   ldb;
+    double beta;
+    unsigned int   ldc;
+    int texAOfs;
+    int texBOfs;
+};
+
 struct cublasSsymmParams {
     const float *A;
     const float *B;
@@ -579,6 +631,19 @@ struct cublasSgemvParams {
     int   lda;
     int   incx;
     float beta;
+    int   incy;
+};
+
+struct cublasDgemvParams {
+    const double *A;
+    const double *x;
+    double *y;
+    int   m;
+    int   n;
+    double alpha;
+    int   lda;
+    int   incx;
+    double beta;
     int   incy;
 };
 
