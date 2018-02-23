@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include <math.h>
-#include "cublas.h"   /* CUBLAS public header file  */
+#include "cublas_v1.h"   /* CUBLAS public header file  */
 #include "cublasP.h"  /* CUBLAS private header file */
 
 __global__ void csscal_main (struct cublasCsscalParams parms);

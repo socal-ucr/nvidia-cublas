@@ -63,6 +63,7 @@
 #error THREAD_COUNT and TILE_DIM do not divide evenly!
 #endif
 
+
 #define COL_INCR               (THREAD_COUNT/TILE_DIM)
 #define C_ELEMS_PER_THREAD     (TILE_SIZE/THREAD_COUNT)
 #define A_ELEMS_PER_THREAD     (TILE_SIZE/THREAD_COUNT)

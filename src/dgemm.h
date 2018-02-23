@@ -265,7 +265,6 @@ do {                                                 \
 #define ELSE       } else {
 #define ELSEIF(x)  } else if (x)
 #endif
-
     unsigned int i, j, l, ii, jj, ll, tid = threadIdx.x;
 #if (C_ELEMS_PER_THREAD >= 1)
     float dp0;

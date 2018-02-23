@@ -45,7 +45,7 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-#include "cublas.h"
+#include "cublas_v1.h"
 #include "cuComplex.h"
 
 /* CUBLAS context */

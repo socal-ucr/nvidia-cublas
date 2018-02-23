@@ -33,7 +33,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-#include "cublas.h"
+#include "cublas_v1.h"
 
 /* BLAS input error reporting function, C version */
 __host__ void CUBLASAPI cublasXerbla (const char *srName, int info)

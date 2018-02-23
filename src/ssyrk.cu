@@ -39,7 +39,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <math.h>
-#include "cublas.h"   /* CUBLAS public header file  */
+#include "cublas_v1.h"   /* CUBLAS public header file  */
 #include "cublasP.h"  /* CUBLAS private header file */
 
 /* Use square 32x32 tiles to access and cache portions of source matrices A,B 

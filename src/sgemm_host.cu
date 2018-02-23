@@ -38,7 +38,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <math.h>
-#include "cublas.h"
+#include "cublas_v1.h"
 #include "cublasP.h"
 
 /* Use square 32x32 tiles to access and cache portions of source matrices A,B 

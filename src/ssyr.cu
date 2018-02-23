@@ -39,7 +39,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <math.h>
-#include "cublas.h"   /* CUBLAS public header file  */
+#include "cublas_v1.h"   /* CUBLAS public header file  */
 #include "cublasP.h"  /* CUBLAS private header file */
 
 #if (CUBLAS_SSYR_GRIDW!=CUBLAS_SSYR_GRIDH)
